@@ -5,10 +5,10 @@ It's inspired by similar projects such as [ImageOptim](http://imageoptim.com), [
 However, PNGOptim only uses [PNGOut](http://advsys.net/ken/utils.htm) and [Zopflipng](https://code.google.com/p/zopfli/)([Why](https://github.com/yumeyao/pngoptim/wiki/How-is-an-image-compressed-into-a-png%3F-How-to-choose-among-the-available-programs%3F)?), and is generally faster because it's SMART not BRUTE.
 
 ###FEATURE
-Multi-CPU ready
-Smart approach(not brute)
-Multi-Files at one time
-Safe for multiple instances
+* Multi-CPU ready
+* Smart approach(not brute)
+* Multi-Files at one time
+* Safe for multiple instances
 
 ###Usage
 1. Download the [batch file](https://raw.github.com/yumeyao/pngoptim/master/pngoptim.cmd)(you can right-click and choose save).
@@ -33,5 +33,7 @@ It seems PNGOut uses a random pattern layout so it might make sense to do multip
 Because this script uses zopfli -q --filters=01234mepb as 1st pass to select best filter, and only use zopfli --filters=p in 2nd pass(that's why this script is faster).<br>
 We should use --filters=xxxxx where xxxxx is all possible good filters.
 3. Even we use --filters=01234mepb --iterations=500, there is a tiny chance the output is not smallest(compared to brute).<br>
-Probably due to zopfli doesn't out-perform zlib all the time????
+See -r option of pngout. This is INSANE!<br>
 4. allow for specifying --iterations for zopflipng.
+5. switches
+6. log and -v = verbose
