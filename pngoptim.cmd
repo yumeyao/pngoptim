@@ -11,31 +11,103 @@ if defined pngout if defined zopflipng if defined deflopt goto:Main
 endlocal & goto:eof
 
 :Main
+echo ************************************************************
+echo   pngoptim 1.0.0 - by yumeyao
+echo ************************************************************
 if a==%1a goto:Usage
 set ParallelCmd=%0
 call:InitSessionID pngoptim
 echo Session ID: %sessionid%
 echo Session ID: %sessionid%>%sessionid%.log
-echo.>>%sessionid%.log
+echo(>>%sessionid%.log
 echo Log File: %__cd__%%sessionid%.log
+echo(
 call:InitParallel 2
 
 set zopfliiterations=
 set pngouttryouts=20
-set pngcount=0
+set recursive=
 
-for /f "delims=" %%i in ('dir /b/s %1') do (
-set /a pngcount=!pngcount!+1
-call:StartProcess cmd /c %0 "func::compress" "%%i"
+set filelist=
+set argvn=%1
+:CheckArgs
+if "!argvn:~0,1!" neq "-" if "!argvn:~0,1!" neq "/" (
+	set filelist=!filelist! !argvn!
+	goto:CheckNextArg
 )
+if /i "!argvn:~1,1!" equ "s" (set recursive=s&goto:CheckNextArg)
+if /i "!argvn:~1,1!" equ "r" (set recursive=r&goto:CheckNextArg)
+set argvnparameter=!argvn:~2!
+if /i "!argvn:~1,1!" equ "z" (
+	set /a zopfliiterations=argvnparameter+0
+	if !zopfliiterations! neq 0 (set zopfliiterations="--iterations=!zopfliiterations!") else set zopfliiterations=
+	goto:CheckNextArg
+)
+if /i "!argvn:~1,1!" equ "y" (
+	set /a pngouttryouts=argvnparameter+0
+	if !pngouttryouts! equ 0 set pngouttryouts=20
+	goto:CheckNextArg
+)
+:CheckNextArg
+shift
+set argvn=%1
+if defined argvn goto:CheckArgs
 
-call:WaitForAllProcess
+set pngcount=0
+if defined filelist call:ProcessFiles %filelist%
 
-rd /q /s "%sessiontmpdir%" >nul 2>nul
+::rd /q /s "%sessiontmpdir%" >nul 2>nul
 endlocal & goto:eof
 
+:ProcessFiles
+if !recursive! equ r (set usedir=true) else (
+	set usedir=false
+	(echo %1 | findstr [?*] >nul 2>nul) && (if defined recursive set usedir=true)
+)
+if !usedir!==true (set forpart1=/f "delims=" &set "forpart2='2^>nul dir /b/s %1'")
+if !usedir!==false (set forpart2=%1 &set forpart1=)
+
+set fileattr=%~a1
+if "!fileattr:~0,1!" equ "d" (
+	set forpart1=/f "delims=" 
+	set "forpart2='2^>nul dir /b/s %1\*.png'"
+)
+
+for %forpart1%%%i in (%forpart2%) do if exist %%i (
+	set /a pngcount=!pngcount!+1
+	call:StartProcess cmd /c %ParallelCmd% "func::compress" "%%i"
+) else if !usedir==false! (
+	echo File %i doesn't exist.
+	echo File %i doesn't exist.>>%sessionid%.log
+	echo(
+	echo(>>%sessionid%.log
+)
+
+shift
+if not a==a%1 goto:ProcessFiles
+
+call:WaitForAllProcess
+goto:eof
+
 :Usage:
-echo>&2 Usage: %0 pngfiles
+echo>&2 Usage: %~n0 pngfiles [options ^| pngfiles]
+echo>&2(
+echo>&2 Options:
+echo>&2  /z[num]  Set --iterations=num for zopflipng (default not specified)
+echo>&2  /y[num]  Set how many times to try pngout (default = 20)
+echo>&2  /s       subdirs
+echo>&2  /r       recursive
+echo>&2           %~n0 [/s^|/r] a.png b*.png
+echo>&2           a.png  b1.png  subdir\a.png  subdir\b1.png
+echo>&2       /s   Yes    Yes                     Yes
+echo>&2       /r   Yes    Yes        Yes          Yes
+echo>&2(
+echo>&2 Suggested Presets:
+echo>&2  FAST     without /z /y specified
+echo>&2  NORMAL   /z20 /y50
+echo>&2  SLOW     /z100 /y500
+echo>&2  INSANE   /z500 /y1500
+echo>&2(
 endlocal & goto:eof
 
 :zopflipng_parse
@@ -160,7 +232,7 @@ if not defined p3t1size set choosewhich=2
 if not defined p3t2size set choosewhich=1
 if not defined choosewhich (
 	set choosewhich=2
-	if %p3t1size% lss %p3t2size% set choosewhich=1
+	if !p3t1size! lss !p3t2size! set choosewhich=1
 )
 ren "%sessiontmpdir%\p%pngcount%p3t%choosewhich%.png" p%pngcount%p3.png
 del /q/f/a "%sessiontmpdir%\p%pngcount%p3t*.png" >nul 2>nul
@@ -203,6 +275,7 @@ if not %output%==0 (
 	set /a sizepercent=outputsize * 10000 / p0size
 	set /a sizepercentleft=!sizepercent! / 100
 	set /a sizepercentright=!sizepercent! %% 100
+	if !sizepercentright! lss 10 set sizepercentleft=0!sizepercentright!
 	echo Optimized: %p0size% -^> %outputsize%, size decreased to !sizepercentleft!.!sizepercentright!%%
 	copy "%sessiontmpdir%\p%pngcount%p%output%.png" %1 >nul 2>nul
 ) else (
