@@ -11,7 +11,7 @@ if defined pngout if defined zopflipng if defined deflopt goto:Main
 endlocal & goto:eof
 
 :Main
-if ""=="%1" goto:Usage
+if a==%1a goto:Usage
 set ParallelCmd=%0
 call:InitSessionID pngoptim
 echo Session ID: %sessionid%
@@ -20,6 +20,8 @@ echo.>>%sessionid%.log
 echo Log File: %__cd__%%sessionid%.log
 call:InitParallel 2
 
+set zopfliiterations=
+set pngouttryouts=20
 set pngcount=0
 
 for /f "delims=" %%i in ('dir /b/s %1') do (
@@ -29,51 +31,167 @@ call:StartProcess cmd /c %0 "func::compress" "%%i"
 
 call:WaitForAllProcess
 
-del /q /s /f "%sessiontmpdir%" >nul 2>nul
+rd /q /s "%sessiontmpdir%" >nul 2>nul
 endlocal & goto:eof
 
 :Usage:
 echo>&2 Usage: %0 pngfiles
 endlocal & goto:eof
 
-:optimize_and_show_pass_info
-for /f %%f in ("%sessiontmpdir%\p%pngcount%p%1.png") do set p%1sizeb4=%%~zf
-%deflopt% /b /a "%sessiontmpdir%\p%pngcount%p%1.png" >nul 2>nul
-for /f %%f in ("%sessiontmpdir%\p%pngcount%p%1.png") do set p%1size=%%~zf
-setlocal
-for /f "tokens=1,2,3 delims= " %%i in ('^^%pngout% -l "%sessiontmpdir%\p%pngcount%p%1.png"') do (
-	set para1= %%i %%j
-	set para2=
-	if %%i==/c3 set para2= %%k
-	if %%i==/c0 set para2= %%k
+:zopflipng_parse
+set filtertypes=
+for /f "skip=1 tokens=1,2 delims=:" %%i in ('^^%zopflipng% --always_zopflify -y %*') do (
+	set str1=%%i
+	set str2=%%j
+	if "!str1:~0,16!"=="Filter strategy " (
+		set /a %varprefix%!str1:~16,2!=!str2:~1,-6!
+		set filtertypes=!filtertypes! !str1:~16,2!
+	)
 )
-echo Pass %1: %p3sizeb4% -^> %p3size%%para1%%para2%
-endlocal
+goto:eof
+
+:zopflipng_postprocess
+for %%i in (%filtertypes1:~0,3%) do (
+	set smallestsize=!sizet1%%i!
+	set t1ftype=%%i
+)
+for %%i in (%filtertypes1%) do if !sizet1%%i! lss !smallestsize! (
+	set smallestsize=!sizet1%%i!
+	set t1ftype=%%i
+)
+if %p1color%==/c3 (
+	set samepalette=same
+	for %%i in (%filtertypes2:~0,3%) do (
+		set t2smallestsize=!sizet2%%i!
+		set t2ftype=%%i
+	)
+	for %%i in (%filtertypes2%) do (
+		REM Because predefined filter preserves colorspace too, so the size is likely different.
+		if not %%i==pr if !sizet1%%i! neq !sizet2%%i! set samepalette=
+		if !sizet2%%i! lss !smallestsize! set smallestsize=!sizet2%%i!
+		if !sizet2%%i! lss !t2smallestsize! (
+			set t2smallestsize=!sizet2%%i!
+			set t2ftype=%%i
+		)
+	)
+	set p1color=/c3!samepalette!
+)
 goto:eof
 
 :func_compress
 setlocal enableextensions enabledelayedexpansion
 shift
-:Pass1_pngout
+
+set p0size=%~z1
+echo Processing File %1:
+
+::Pass1_pngout - In case the source file has wrong CRC checksum.
 set filter=-f5
 for /f "tokens=1,2,3 delims= " %%i in ('^^%pngout% -l %1') do (
 	set para2=
 	if %%i==/c3 set para2= %%k
 	if %%i==/c0 set para2= %%k
 	if "/f5"=="%%j" set filter=-f6
-	echo Processing File %1:
 	echo Source: %~z1 %%i %%j!para2!
-	set p0size=%~z1
+	set p0color=%%i
 )
-%pngout% -force -s2 %filter% %1 "%sessiontmpdir%\p%pngcount%p1.png" >nul 2>nul
-:Pass2_zopflipng_q
-%zopflipng% --always_zopflify -q --filters=01234mepb --splitting=3 "%sessiontmpdir%\p%pngcount%p1.png" "%sessiontmpdir%\p%pngcount%p2.png"
-:Pass3_zopflipng
-%zopflipng% --iterations=20 --filters=p --splitting=3 "%sessiontmpdir%\p%pngcount%p2.png" "%sessiontmpdir%\p%pngcount%p3.png"
-call:optimize_and_show_pass_info 3
-:Pass4_pngout
-%pngout% -force -f6 "%sessiontmpdir%\p%pngcount%p3.png" "%sessiontmpdir%\p%pngcount%p4.png" >nul 2>nul
-call:optimize_and_show_pass_info 4
+%pngout% -force -y -s2 %filter% %1 "%sessiontmpdir%\p%pngcount%p1t1.png" >nul 2>nul
+for /f "tokens=1,2,3 delims= " %%i in ('^^%pngout% -l "%sessiontmpdir%\p%pngcount%p1t1.png"') do (
+	set p1color=%%i
+)
+if %p1color%==/c3 %pngout% -force -y -c6 -s2 -f6 "%sessiontmpdir%\p%pngcount%p1t1.png" "%sessiontmpdir%\p%pngcount%p1t2.png" >nul 2>nul
+echo Pass 1: %p1color%
+
+::Pass2_zopflipng_q - Find good filters (and good? palette)
+set varprefix=sizet1
+call:zopflipng_parse -q "--filters=01234mepb" "--splitting=3" "%sessiontmpdir%\p%pngcount%p1t1.png" "%sessiontmpdir%\p%pngcount%p2t1.png"
+set varprefix=sizet2
+if %p1color%==/c3 call:zopflipng_parse -q "--filters=01234mepb" "--splitting=3" "%sessiontmpdir%\p%pngcount%p1t2.png" "%sessiontmpdir%\p%pngcount%p2t2.png"
+set filtertypes1=ze on tw th fo mi en pr br
+set filtertypes2=ze on tw th fo mi en pr br
+call:zopflipng_postprocess
+if defined samepalette echo Pass 2: Palettes seem to be same.
+set /a sizethreshold=!smallestsize! * 102 / 100
+set t1filters=
+set t2filters=
+set filterswitchze=0
+set filterswitchon=1
+set filterswitchtw=2
+set filterswitchth=3
+set filterswitchfo=4
+set filterswitchmi=m
+set filterswitchen=e
+set filterswitchpr=p
+set filterswitchbr=b
+set prneeded=yes
+if not %filter%==-f6 if not %p1color%==/c3 set prneeded=
+if %p1color%==/c3 (set forloop=1 2) else set forloop=1
+for %%f in (%forloop%) do for %%i in (%filtertypes%) do if !sizet%%f%%i! leq !sizethreshold! (
+	if %%i==pr (if defined prneeded set t%%ffilters=!t%%ffilters!p) else set t%%ffilters=!t%%ffilters!!filterswitch%%i!
+)
+echo Pass 2: %sizet1ze% %sizet1on% %sizet1tw% %sizet1th% %sizet1fo% %sizet1mi% %sizet1en% %sizet1pr% %sizet1br%
+if defined t1filters echo         use --filters=%t1filters% for next pass
+if %p1color%==/c3 (
+	echo Pass 2: %sizet2ze% %sizet2on% %sizet2tw% %sizet2th% %sizet2fo% %sizet2mi% %sizet2en% %sizet2pr% %sizet2br%
+	if defined t2filters echo         use --filters=%t2filters% for next pass
+)
+
+::Pass3_zopflipng - Now compress using zopflipng
+set varprefix=sizet1
+set filtertypes1=
+set p3t1size=
+if defined t1filters (
+	call:zopflipng_parse %zopfliiterations% "--filters=%t1filters%" "--splitting=3" "%sessiontmpdir%\p%pngcount%p1t1.png" "%sessiontmpdir%\p%pngcount%p3t1.png"
+	set filtertypes1=!filtertypes!
+	%deflopt% /b /a "%sessiontmpdir%\p%pngcount%p3t1.png" >nul 2>nul
+	for /f %%f in ("%sessiontmpdir%\p%pngcount%p3t1.png") do set p3t1size=%%~zf
+)
+set varprefix=sizet2
+set filtertypes2=
+set p3t2size=
+if defined t2filters (
+	call:zopflipng_parse %zopfliiterations% "--filters=%t2filters%" "--splitting=3" "%sessiontmpdir%\p%pngcount%p1t2.png" "%sessiontmpdir%\p%pngcount%p3t2.png"
+	set filtertypes2=!filtertypes!
+	%deflopt% /b /a "%sessiontmpdir%\p%pngcount%p3t2.png" >nul 2>nul
+	for /f %%f in ("%sessiontmpdir%\p%pngcount%p3t2.png") do set p3t2size=%%~zf
+)
+set choosewhich=
+if not defined p3t1size set choosewhich=2
+if not defined p3t2size set choosewhich=1
+if not defined choosewhich (
+	set choosewhich=2
+	if %p3t1size% lss %p3t2size% set choosewhich=1
+)
+ren "%sessiontmpdir%\p%pngcount%p3t%choosewhich%.png" p%pngcount%p3.png
+del /q/f/a "%sessiontmpdir%\p%pngcount%p3t*.png" >nul 2>nul
+for /f "tokens=1,2,3 delims= " %%i in ('^^%pngout% -l "%sessiontmpdir%\p%pngcount%p3.png"') do (
+	set para1= %%i 
+	set para2=
+	if %%i==/c3 set para2= %%k
+	if %%i==/c0 set para2= %%k
+)
+call:zopflipng_postprocess
+set bestfilter=!t%choosewhich%ftype!
+set p3size=!p3t%choosewhich%size!
+echo Pass 3: %p3size%%para1%/f!filterswitch%bestfilter%!%para2%
+
+::Pass4_pngout - Now recompress use pngout with -r
+for /l %%i in (1,1,%pngouttryouts%) do (
+	%pngout% -force -y -r -ks -f6 "%sessiontmpdir%\p%pngcount%p3.png" "%sessiontmpdir%\p%pngcount%p4t%%i.png" >nul 2>nul
+)
+set /a pngoutkeepfiles=(%pngouttryouts%+9)/10
+pushd %sessiontmpdir%
+for /f "skip=%pngoutkeepfiles% delims=" %%i in ('dir /b/os "%sessiontmpdir%\p%pngcount%p4t*.png"') do del /q/f/a "%%i" >nul 2>nul
+%deflopt% /b /a "%sessiontmpdir%\p%pngcount%p4t*.png" >nul 2>nul
+for /f "skip=1 delims=" %%i in ('dir /b/os "%sessiontmpdir%\p%pngcount%p4t*.png"') do del /q/f/a "%%i" >nul 2>nul
+for /f "delims=" %%i in ('dir /b/os "%sessiontmpdir%\p%pngcount%p4t*.png"') do (
+	set p4filename=%%~ni
+	set besttry=!p4filename:p%pngcount%p4t=!
+	set p4size=%%~zi
+	ren "%sessiontmpdir%\!p4filename!.png" p%pngcount%p4.png
+)
+popd
+echo Pass 4: %p4size% Tryout number: %besttry%
 
 set output=0
 set outputsize=%p0size%
@@ -81,8 +199,17 @@ for %%i in (3 4) do if !p%%isize! lss !outputsize! (
 	set output=%%i
 	set outputsize=!p%%isize!
 )
-if not %output%==0 copy "%sessiontmpdir%\p%pngcount%p%output%.png" %1 >nul 2>nul
+if not %output%==0 (
+	set /a sizepercent=outputsize * 10000 / p0size
+	set /a sizepercentleft=!sizepercent! / 100
+	set /a sizepercentright=!sizepercent! %% 100
+	echo Optimized: %p0size% -^> %outputsize%, size decreased to !sizepercentleft!.!sizepercentright!%%
+	copy "%sessiontmpdir%\p%pngcount%p%output%.png" %1 >nul 2>nul
+) else (
+	echo Cannot optimize the file for a smaller size within this try.
+)
 
+echo.
 endlocal & goto:eof
 
 
@@ -141,7 +268,7 @@ shift
 set cmdline=%1
 shift
 :parsecmdline
-if "%~1" neq "" (
+if not a==%1a (
   set cmdline=%cmdline% %1
   shift
   goto :parsecmdline
