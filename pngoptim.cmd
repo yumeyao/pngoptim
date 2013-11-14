@@ -56,7 +56,7 @@ if defined argvn goto:CheckArgs
 set pngcount=0
 if defined filelist call:ProcessFiles %filelist%
 
-::rd /q /s "%sessiontmpdir%" >nul 2>nul
+rd /q /s "%sessiontmpdir%" >nul 2>nul
 endlocal & goto:eof
 
 :ProcessFiles
