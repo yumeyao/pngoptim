@@ -12,7 +12,7 @@ endlocal & goto:eof
 
 :Main
 echo ************************************************************
-echo   pngoptim 1.0.0 - by yumeyao
+echo   pngoptim 1.0.1 - by yumeyao
 echo ************************************************************
 if a==%1a goto:Usage
 set ParallelCmd=%0
@@ -160,6 +160,11 @@ echo Processing File %1:
 ::Pass1_pngout - In case the source file has wrong CRC checksum.
 set filter=-f5
 for /f "tokens=1,2,3 delims= " %%i in ('^^%pngout% -l %1') do (
+	set para2=%%i
+	if not "!para2:~0,2!"=="/c" (
+		echo %1 is not a valid png file.
+		goto:eof
+	)
 	set para2=
 	if %%i==/c3 set para2= %%k
 	if %%i==/c0 set para2= %%k
@@ -248,14 +253,14 @@ set p3size=!p3t%choosewhich%size!
 echo Pass 3: %p3size%%para1%/f!filterswitch%bestfilter%!%para2%
 
 ::Pass4_pngout - Now recompress use pngout with -r
-for /l %%i in (1,1,%pngouttryouts%) do (
-	%pngout% -force -y -r -ks -f6 "%sessiontmpdir%\p%pngcount%p3.png" "%sessiontmpdir%\p%pngcount%p4t%%i.png" >nul 2>nul
-)
-set /a pngoutkeepfiles=(%pngouttryouts%+9)/10
 pushd %sessiontmpdir%
-for /f "skip=%pngoutkeepfiles% delims=" %%i in ('dir /b/os "%sessiontmpdir%\p%pngcount%p4t*.png"') do del /q/f/a "%%i" >nul 2>nul
-%deflopt% /b /a "%sessiontmpdir%\p%pngcount%p4t*.png" >nul 2>nul
-for /f "skip=1 delims=" %%i in ('dir /b/os "%sessiontmpdir%\p%pngcount%p4t*.png"') do del /q/f/a "%%i" >nul 2>nul
+%pngout% -force -y -ks -f6 p%pngcount%p3.png p%pngcount%p4t1.png >nul 2>nul
+%deflopt% /b /a p%pngcount%p4t1.png >nul 2>nul
+for /l %%i in (2,1,%pngouttryouts%) do (
+	%pngout% -force -y -r -ks -f6 p%pngcount%p3.png p%pngcount%p4t%%i.png >nul 2>nul
+	%deflopt% /b /a p%pngcount%p4t%%i.png >nul 2>nul
+	for /f "skip=1 delims=" %%j in ('dir /b/os "%sessiontmpdir%\p%pngcount%p4t*.png"') do del /q/f/a "%%j" >nul 2>nul
+)
 for /f "delims=" %%i in ('dir /b/os "%sessiontmpdir%\p%pngcount%p4t*.png"') do (
 	set p4filename=%%~ni
 	set besttry=!p4filename:p%pngcount%p4t=!
@@ -263,7 +268,7 @@ for /f "delims=" %%i in ('dir /b/os "%sessiontmpdir%\p%pngcount%p4t*.png"') do (
 	ren "%sessiontmpdir%\!p4filename!.png" p%pngcount%p4.png
 )
 popd
-echo Pass 4: %p4size% Tryout number: %besttry%
+echo Pass 4: %p4size% Tryout number: %besttry% out of %pngouttryouts%
 
 set output=0
 set outputsize=%p0size%
@@ -272,10 +277,9 @@ for %%i in (3 4) do if !p%%isize! lss !outputsize! (
 	set outputsize=!p%%isize!
 )
 if not %output%==0 (
-	set /a sizepercent=outputsize * 10000 / p0size
-	set /a sizepercentleft=!sizepercent! / 100
-	set /a sizepercentright=!sizepercent! %% 100
-	if !sizepercentright! lss 10 set sizepercentleft=0!sizepercentright!
+	set /a sizepercentleft=outputsize*100/p0size
+	set /a sizepercentright=(outputsize*100-sizepercentleft*p0size)*100/p0size
+	if !sizepercentright! lss 10 set sizepercentright=0!sizepercentright!
 	echo Optimized: %p0size% -^> %outputsize%, size decreased to !sizepercentleft!.!sizepercentright!%%
 	copy "%sessiontmpdir%\p%pngcount%p%output%.png" %1 >nul 2>nul
 ) else (
@@ -395,7 +399,7 @@ if not %errorlevel%==9009 for /f %%i in ('wmic cpu get NumberOfLogicalProcessors
 if %ptotal%==0 set ptotal=%1
 set pavailable=%ptotal%
 set pcount=0
-for /l %%i in (1,1,%1) do set p%%iused=0
+for /l %%i in (1,1,%ptotal%) do set p%%iused=0
 goto:eof
 
 :InitSessionID
