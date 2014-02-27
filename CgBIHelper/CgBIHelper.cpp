@@ -68,9 +68,9 @@ int main(int argc, char **argv) {
 
 	int outsize;
 	if (chunkCgBI) {
-		outsize = size - chunkCgBI + IDATcount * 6;
+		outsize = size - chunkCgBI + 6;
 	} else {
-		outsize = size - IDATcount * 6;
+		outsize = size - 6;
 		std::ifstream cgbi(argv[2], std::ios::in|std::ios::binary|std::ios::ate);
 		std::streamsize cgbisize = 0;
 		if(cgbi.seekg(0, std::ios::end).good()) cgbisize = cgbi.tellg();
@@ -89,32 +89,45 @@ int main(int argc, char **argv) {
 
 	int offset = 8;
 	int written = 0;
+	int IDATn = 0;
 	while(offset <= size - 12) {
 		unsigned long chunksize = _byteswap_ulong(*(unsigned long *)&in[offset]);
 		unsigned long chunkname = *(unsigned long *)&in[offset+4];
 		if (chunkname == MKFOURCC('I','D','A','T')) {
+			++IDATn;
+
 			union {
 				unsigned long ul;
 				unsigned char uc[4];
 			} newchunksize;
-			newchunksize.ul = _byteswap_ulong(chunksize + (chunkCgBI ? 6 : -6));
-			out[written++] = newchunksize.uc[0];
-			out[written++] = newchunksize.uc[1];
-			out[written++] = newchunksize.uc[2];
+			newchunksize.ul = chunksize;
+			if (IDATn == 1)	newchunksize.ul += chunkCgBI ? 2 : -2;
+			if (IDATn == IDATcount) newchunksize.ul += chunkCgBI ? 4 : -4;
 			out[written++] = newchunksize.uc[3];
+			out[written++] = newchunksize.uc[2];
+			out[written++] = newchunksize.uc[1];
+			out[written++] = newchunksize.uc[0];
 			out[written++] = 'I';
 			out[written++] = 'D';
 			out[written++] = 'A';
 			out[written++] = 'T';
-			if (chunkCgBI) {
-				out[written++] = 0x78; //zlib header
-				out[written++] = 0x5C; //zlib header
+			if (IDATn == 1) {
+				if (chunkCgBI) {
+					out[written++] = 0x78; //zlib header
+					out[written++] = 0xDA; //zlib header Best Compression
+				} else offset += 2;
 			}
-			offset += chunkCgBI ? 8 : 10;
+			offset += 8;
 			memcpy(&out[written], &in[offset], chunksize+4); //tricky.. zlib CRC or png chunk CRC doesn't matter here
 
-			offset += chunksize + (chunkCgBI ? 4 : 8);
-			written += chunksize + (chunkCgBI ? 8 : 4);
+			offset += chunksize + 4;
+			written += chunksize + 4;
+			if (IDATn == IDATcount) {
+				if (chunkCgBI)
+					written += 4;
+				else
+					offset += 4;
+			}
 		} else if (chunkname == MKFOURCC('C','g','B','I')) {
 			if (chunkCgBI) {
 				std::ofstream cgbi(argv[2], std::ios::out|std::ios::binary|std::ios::trunc);
