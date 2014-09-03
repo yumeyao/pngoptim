@@ -14,7 +14,7 @@ PNGOptim runs generally faster and the output is generally smaller because it's 
 
 ###Usage
 1. Download the [batch file](https://raw.github.com/yumeyao/pngoptim/master/pngoptim.cmd)(you can right-click and choose save).
-2. Ensure you have a copy of [PNGOut](http://advsys.net/ken/utils.htm), [Zopflipng](https://raw.github.com/yumeyao/pngoptim/master/zopflipng.exe) and [DeflOpt](http://www.walbeehm.com/download/) and they are accessable(you can just put the exe files to the same directory as the batch file)<br>
+2. Ensure you have a copy of [PNGOut](http://advsys.net/ken/utils.htm), [Zopflipng](https://raw.github.com/yumeyao/pngoptim/master/zopflipng.exe) and [DeflOpt](http://web.archive.org/web/20140117044314/http://www.walbeehm.com/download/) and they are accessable(you can just put the exe files to the same directory as the batch file)<br>
 _As a respect of the authors, I DON'T contain the exe files in this project_
 3. Now use it to optimize PNG files. They are optimized in-place.
  * Drag'n'Drop PNGs to the batch file or d'n'd folders.
