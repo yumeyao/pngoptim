@@ -1,3 +1,17 @@
+> # Status (2025): Obsolete
+> **Historical reference only.** Use **[ECT](https://github.com/fhanau/Efficient-Compression-Tool)** for a one-shot ultimate solution.
+>
+> **Why obsolete?** PNGOptim orchestrates PNGOUT/Zopfli in heuristic passes; **ECT** uses Zopfli with the **BT match finder from 7-Zip's Deflate**, effectively closing the gap where Zopfli underperformed.
+>
+> However PNGOptim can still possibly speed up the process by only selecting proper zopfli `--filters` but that's usually not a great advance given our PCs are much faster than before.
+>
+> **References**
+> - Rationale and internals: **[DEFLATE.md](https://github.com/yumeyao/7zDeflate/blob/master/DEFLATE.md)**  
+> - Quick comparison of ECT: https://github.com/yumeyao/7zDeflate
+> - Legacy notes still valid for background: **[project WIKIs](https://github.com/yumeyao/pngoptim/wiki)**
+>
+> **Note on `CgBIHelper`** (previously undocumented): Converts between standard PNGs and iOS **CgBI** PNGs. CgBI adds a private `CgBI` chunk, stores **raw DEFLATE** in `IDAT` (no zlib wrapper), and uses **BGRA** + **premultiplied alpha**. To **optimize**, **re-wrap IDAT in zlib** and leave pixels unchanged to get a valid (if visually wrong) PNG that standard tools can recompress.
+
 # PNGOptim
 PNGOptim is a CMD Batch file ([Why?](https://github.com/yumeyao/pngoptim/wiki/Why-using-CMD-Batch%3F)) for optimizing PNG files, aiming at good quality(small file size) with less effort(less tries hence runs faster).
 
